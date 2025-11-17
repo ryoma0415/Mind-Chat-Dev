@@ -1,0 +1,20 @@
+# Python キャッシュ
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 仮想環境
+.venv/
+venv/
+
+# 環境変数ファイルなど（使っていれば）
+.env
+*.log
+
+# エディタ・OSごとのゴミファイル
+.vscode/
+.idea/
+.DS_Store
+
+# 大きなモデルファイルは Git に載せない
+model/
