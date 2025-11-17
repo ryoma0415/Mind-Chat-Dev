@@ -11,18 +11,14 @@ class AppPaths:
 
     root: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent)
     data_dir: Path = field(init=False)
-    history_file: Path = field(init=False)
     model_dir: Path = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "data_dir", self.root / "data")
-        object.__setattr__(self, "history_file", self.data_dir / "history.json")
         object.__setattr__(self, "model_dir", self.root / "model")
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.model_dir.mkdir(parents=True, exist_ok=True)
-        if not self.history_file.exists():
-            self.history_file.write_text("[]", encoding="utf-8")
 
     def ensure_history_file(self, filename: str) -> Path:
         path = (self.data_dir / filename).resolve()

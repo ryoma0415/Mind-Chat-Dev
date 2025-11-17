@@ -28,7 +28,8 @@ class HistoryManager:
 
     def __init__(self, config: AppConfig, history_file: Path | None = None):
         self._config = config
-        self._path: Path = history_file or config.paths.history_file
+        default_path = config.default_mode.history_path(config.paths)
+        self._path: Path = history_file or default_path
         self._path.parent.mkdir(parents=True, exist_ok=True)
         if not self._path.exists():
             self._path.write_text("[]", encoding="utf-8")
