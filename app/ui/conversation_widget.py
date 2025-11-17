@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
 from typing import Iterable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from ..models import ChatMessage, Conversation
+from .media_display import MediaDisplayWidget
 
 
 class ConversationWidget(QWidget):
@@ -36,6 +39,14 @@ class ConversationWidget(QWidget):
         self._transcript.setReadOnly(True)
         self._transcript.setMinimumHeight(300)
 
+        self._media_widget = MediaDisplayWidget(self)
+        self._splitter = QSplitter(Qt.Vertical, self)
+        self._splitter.addWidget(self._media_widget)
+        self._splitter.addWidget(self._transcript)
+        self._splitter.setStretchFactor(0, 1)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setSizes([240, 360])
+
         self._status_label = QLabel("", self)
         self._status_label.setObjectName("StatusLabel")
         self._status_label.setStyleSheet("color: #666666;")
@@ -54,7 +65,7 @@ class ConversationWidget(QWidget):
 
         layout = QVBoxLayout()
         layout.addWidget(self._welcome_label)
-        layout.addWidget(self._transcript, stretch=1)
+        layout.addWidget(self._splitter, stretch=1)
         layout.addWidget(self._status_label)
         layout.addLayout(input_row)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -90,6 +101,14 @@ class ConversationWidget(QWidget):
         self._assistant_label = normalized
         if self._current_conversation:
             self._render_messages(self._current_conversation.messages)
+
+    def set_media_content(self, media_type: str, media_path: Path | None) -> None:
+        if media_type == "video":
+            self._media_widget.display_video(media_path)
+        elif media_type == "image":
+            self._media_widget.display_image(media_path)
+        else:
+            self._media_widget.clear()
 
     # Internal helpers ---------------------------------------------------
     def _handle_submit(self) -> None:

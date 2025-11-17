@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,9 @@ class ConversationMode:
     window_title: str
     theme: ModeTheme
     system_prompt: str | None = None
+    media_subdir: str | None = None
+    media_type: Literal["video", "image", "none"] = "none"
+    assistant_label: str | None = None
 
     def history_path(self, paths: AppPaths) -> Path:
         return paths.ensure_history_file(self.history_filename)
@@ -81,7 +85,7 @@ class AppConfig:
     top_p: float = 0.9
     gpu_layers: int = 0
     threads: int | None = None
-    default_mode_key: str = "mind_chat"
+    default_mode_key: str = "plain_chat"
     modes: tuple[ConversationMode, ...] = field(init=False)
 
     @property
@@ -114,6 +118,9 @@ class AppConfig:
                 window_title="Mind-Chat - カウンセリングモード",
                 theme=mind_theme,
                 system_prompt=self.system_prompt,
+                media_subdir="Mind-Chat",
+                media_type="video",
+                assistant_label="Mind-Chat",
             ),
             ConversationMode(
                 key="plain_chat",
@@ -122,6 +129,9 @@ class AppConfig:
                 window_title="Mind-Chat - 通常会話モード",
                 theme=plain_theme,
                 system_prompt=None,
+                media_subdir="通常モード",
+                media_type="image",
+                assistant_label="Gemma2-2B-JPN-IT",
             ),
         )
 

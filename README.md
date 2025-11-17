@@ -1,78 +1,101 @@
 # Mind-Chat
 
-ローカルで動作する悩み相談カウンセラーアプリです。Gemma 2 2B Japanese IT (GGUF) を llama.cpp 互換ランタイムで扱い、完全ローカルで対話履歴とお気に入りを管理します。UI は PySide6 を用いたデスクトップアプリで、Linux/Windows いずれのプラットフォームでも同じコードで動作する構成になっています。
+Mind-Chat は Gemma 2 2B Japanese IT (GGUF) をローカル実行し、完全オフラインで悩み相談や通常会話を楽しめるデスクトップアプリです。UI は PySide6 製で Windows / Linux を共通コードでサポートし、履歴やお気に入りもローカル JSON で永続化します。
 
-## 主な機能
-- 起動直後に「こんにちは, 本日はどうされましたか？ 気楽に話していってくださいね。」と表示し、ユーザー入力を受付
-- llama-cpp-python を用いたローカル LLM (Gemma 2 2B Japanese IT, GGUF) での返答生成
-- JSON ベースの完全ローカル履歴管理（最大 60 件／お気に入りは最大 50 件、溢れた場合は非お気に入りから自動削除）
-- 履歴一覧・お気に入りトグル・再開・新規開始ボタンを備えたデスクトップ UI
-- UI 上で「Mind-Chat (カウンセリング)」「通常会話」の 2 モードを切替可能。モードごとに履歴が独立し、テーマカラー（緑系／青系）とウィンドウタイトルも自動で切り替わります。
-- 履歴／モデルディレクトリの固定パス化と PyInstaller 想定のシンプルな構成
+## 主な特徴
+- **完全ローカル推論**: `llama-cpp-python` で GGUF モデルを直接ロードし、ネットワーク接続不要で応答生成。
+- **2 種類の会話モード**: Mind-Chat (カウンセリング) と 通常会話 を切り替え。モードごとに履歴・お気に入りを独立管理し、配色・ウィンドウタイトル・アシスタント名を自動切替。
+- **メディア表示エリア**: モードに応じて `screen_display/` 内の動画または静止画をチャット画面上部に表示。Mind-Chat では動画をループ再生、通常会話では静止画をフィット表示。
+- **履歴管理**: モードごとに最大 60 会話、お気に入り最大 50 件。超過時は非お気に入りを自動削除。履歴から再開・お気に入りトグル・再生成などの操作が可能。
+- **PyInstaller 配布を想定**: ランチャースクリプトと `resource_path` ヘルパーを用意し、`screen_display/` や `model/` を含めた onedir 配布が容易。
 
 ## ディレクトリ構成
 ```
 Mind-Chat/
-├── mindchat_launcher.py   # PyInstaller 用のランチャー
 ├── app/
 │   ├── __init__.py
-│   ├── config.py          # パス／LLM設定
-│   ├── history.py         # JSON 永続化と制約ロジック
-│   ├── llm_client.py      # llama.cpp ラッパー
-│   ├── main.py            # アプリエントリーポイント
-│   ├── models.py          # データモデル
+│   ├── config.py             # パス、LLM、モード定義
+│   ├── history.py            # 履歴とお気に入り管理ロジック
+│   ├── llm_client.py         # llama.cpp ラッパー
+│   ├── main.py               # アプリエントリーポイント
+│   ├── models.py             # Conversation / ChatMessage モデル
+│   ├── resources.py          # PyInstaller 対応のリソース解決
 │   └── ui/
-│       ├── __init__.py
 │       ├── conversation_widget.py
 │       ├── history_panel.py
 │       ├── main_window.py
+│       ├── media_display.py  # 画像・動画表示ウィジェット
 │       └── workers.py
-├── data/                  # 履歴 (history_mindchat.json, history_plain.json) が保存される
-├── model/                 # Gemma GGUF を配置する
+├── data/                     # 履歴 JSON (history_mindchat.json 等)
+├── model/                    # GGUF モデル配置ディレクトリ
+├── screen_display/           # モード別の動画・画像リソース
+├── mindchat_launcher.py      # PyInstaller 用ランチャー
 ├── requirements.txt
 └── README.md
 ```
 
-## セットアップ
-1. Python 3.10+ を用意します。
-2. 依存ライブラリをインストールします。
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-3. `model/` ディレクトリに Gemma 2 2B Japanese IT の GGUF ファイルを配置します。  
-   既定ファイル名は `gemma-2-2b-it-japanese-it.gguf` です。別名を使う場合は環境変数 `MINDCHAT_MODEL_PATH` でフルパスを指定してください。  
-   取得手順の詳細は `docs/model_setup.md` を参照してください。
+## 動作要件
+- Python 3.10 以上
+- `pip install -r requirements.txt` で導入するライブラリ
+  - `llama-cpp-python>=0.2.84`
+  - `PySide6>=6.7.0`
+- **Linux のみ**: QtMultimedia が PulseAudio を利用するため `libpulse0` (および `libpulse-mainloop-glib0`) を apt 等で事前にインストールしてください。
+- Gemma 2 2B Japanese IT (GGUF) のモデルファイル
 
-## 実行方法
+## セットアップ手順
+```bash
+git clone <this-repo>
+cd Mind-Chat
+python -m venv .venv
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+## モデルファイルの準備
+1. `model/` 配下に Gemma 2 2B Japanese IT の GGUF を配置します。デフォルトファイル名は `gemma-2-2b-it-japanese-it.gguf` です。
+2. 別ファイル名や別ディレクトリを使う場合は環境変数 `MINDCHAT_MODEL_PATH` にフルパスを指定してください。
+
+## メディアアセット
+- `screen_display/Mind-Chat/` に動画 (`.mp4`/`.mov`/`.mkv` など) を置くと Mind-Chat モードでループ再生されます。複数ある場合はファイル名の昇順で最初の 1 つを選択。
+- `screen_display/通常モード/` に画像 (`.png`/`.jpg`/`.gif` 等) を置くと通常会話モードで表示されます。
+- PyInstaller で配布する場合は上記ディレクトリを `collect_data_files` 等で忘れずに同梱してください。
+
+## アプリの実行
 ```bash
 python -m app.main
 ```
-起動すると履歴ペインと対話ペインが表示されます。右側で入力・送信するとローカル LLM が応答し、左側で履歴の再開やお気に入り指定が可能です。
+- 起動直後は **通常会話モード** で開始します（メディアは静止画表示、アシスタント名は「Gemma2-2B-JPN-IT」）。
+- 左ペインの履歴から会話を選択／お気に入り切替／新規作成が可能。右ペインで入力するとローカル LLM が応答します。
+- モード切替ドロップダウンを操作すると、履歴・テーマカラー・メディア表示・アシスタント名が切り替わります。
 
-## 会話モード
-- **Mind-Chat モード:** 既存のカウンセリング特化プロンプトを先頭に付与し、Gemma 2 2B Japanese IT で丁寧な相談対応を行います。テーマカラーは落ち着いた緑系です。
-- **通常会話モード:** システムプロンプトを付けずにモデルへ直接メッセージを渡すシンプルな会話モードです。テーマカラーは青系です。
-- モード切替はウィンドウ上部のドロップダウンで行い、切り替え後はそのモード専用の履歴だけが左ペインに表示されます。
-- 各モードは `data/history_mindchat.json` / `data/history_plain.json` に完全ローカルで保存され、制約やお気に入りロジックも共通です。
+## 会話管理仕様
+- 履歴はモードごとに JSON (`data/history_mindchat.json`, `data/history_plain.json`) へ保存。
+- 最大 60 会話まで保持し、超過時は「お気に入りではない最古の会話」から自動削除。
+- お気に入りは各モード最大 50 件。上限を超える登録はエラーで拒否。
+- 会話タイトルは最初のユーザーメッセージから自動生成されます。
 
-## 履歴管理仕様
-- 履歴は `data/history_mindchat.json` / `data/history_plain.json` に JSON 形式で保存され、モードごとに完全ローカルで保持されます。
-- 各モードにつき 60 会話まで保持し、上限超過時は「お気に入りではない最古の会話」から順に削除されます。
-- お気に入りはモードごとに最大 50 件。上限到達時はエラーダイアログで通知され、新規お気に入り登録は拒否されます。
+## 設定と拡張ポイント
+- `app/config.py` の `AppConfig` でスレッド数、GPU レイヤ数、温度、トークン長などを変更可能。
+- `ConversationMode` でメディアフォルダ・アシスタント表示名・システムプロンプトなどをモードごとに指定できます。
+- `app/resources.py` の `resource_path()` は PyInstaller の `_MEIPASS` に対応済み。独自リソースを追加する際もこのヘルパーを利用してください。
 
-## モデル／ビルドに関する注意
-- llama-cpp-python は CPU/GPU 構成を自動検出し、`AppConfig` でスレッド数や GPU レイヤ数を調整できます。
-- PyInstaller 等でバンドルする際は `model/` ディレクトリを同梱し、`python -m app.main` と同じエントリポイントを指定してください。
-- ネットワークアクセスは一切不要で、UI からも外部通信は行っていません。
+## PyInstaller での配布手順の例
+```bash
+pyinstaller --onedir --name MindChat \
+  --add-data "screen_display:screen_display" \
+  --add-data "model:model" \
+  mindchat_launcher.py
+```
+- `--add-data` の区切りは Windows では `;`、Linux では `:` になる点に注意。
+- 生成された `dist/MindChat/` フォルダごと配布すれば、ユーザーは `MindChat.exe` を実行するだけで利用できます。
 
-### Windows向けアプリ配布
-- `pyinstaller --onedir` を使って `dist/MindChat` フォルダを作成し、そのフォルダ全体を配布します。ユーザーはフォルダを解凍し `MindChat.exe` をダブルクリックするだけで起動できます。
-- 詳しい手順や注意点は `docs/windows_packaging.md` を参照してください。
+## トラブルシューティング
+- **`ImportError: libpulse.so.0`**: Linux で PulseAudio ライブラリが不足しています。`sudo apt install libpulse0 libpulse-mainloop-glib0` を実行してください。
+- **モデルファイルが見つからないエラー**: `model/` に GGUF が存在するか、`MINDCHAT_MODEL_PATH` の値を再確認してください。
+- **動画/画像が表示されない**: `screen_display/<モード名>/` に対応拡張子のファイルがあるか確認してください。存在しない場合はプレースホルダーが表示されます。
 
-## 次のステップ例
-1. テスト用モック LLM を用意して CI でも UI 以外を検証できるようにする。
-2. OpenCL/CUDA など GPU 最適化オプションを `AppConfig` から切り替えられるようにする。
-3. PyInstaller 用の spec ファイルや自動ビルドスクリプトを追加し、Windows 向け配布を容易にする。
-4. LangChain 連携・キャラクター UI・音声 I/O などの将来的な拡張については `docs/future_expansion.md` に検討内容をまとめています。
+## 参考・今後の拡張
+- テスト用のモック LLM、GPU 切替 UI、PyInstaller spec の追加などの TODO は `app/config.py` やコメントを参照して進めてください。
+- LangChain 連携や音声 I/O などのアイデアを追加する場合は、`resource_path()` を活用してリソース管理を一本化すると保守が容易になります。
+
+ローカルで安全に動作するカウンセリングアプリとして、Mind-Chat をぜひ活用してください。

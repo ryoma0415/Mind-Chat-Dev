@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QThread
@@ -18,9 +20,18 @@ from ..config import AppConfig, ConversationMode
 from ..history import FavoriteLimitError, HistoryError, HistoryManager
 from ..llm_client import LocalLLM
 from ..models import ChatMessage, Conversation
+from ..resources import resource_path
 from .conversation_widget import ConversationWidget
 from .history_panel import HistoryPanel
 from .workers import LLMWorker
+
+
+MEDIA_EXTENSIONS = {
+    "video": (".mp4", ".mov", ".mkv", ".avi", ".webm"),
+    "image": (".png", ".jpg", ".jpeg", ".bmp", ".gif"),
+}
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -41,6 +52,7 @@ class MainWindow(QMainWindow):
             for key, mode in self._modes.items()
         }
         self._current_conversation_ids: dict[str, str | None] = {key: None for key in self._modes}
+        self._media_cache: dict[str, Path | None] = {}
         self._llm_client: LocalLLM | None = None
         self._llm_error: str | None = None
 
@@ -57,7 +69,8 @@ class MainWindow(QMainWindow):
         self._history_panel = HistoryPanel(self)
         self._history_panel.set_mode_label(self._active_mode.display_name)
         self._conversation_widget = ConversationWidget(self)
-        self._conversation_widget.set_assistant_label(self._active_mode.display_name)
+        self._apply_assistant_label()
+        self._update_media_display()
 
         self._mode_selector = QComboBox(self)
         for mode in self._modes.values():
@@ -227,7 +240,8 @@ class MainWindow(QMainWindow):
             return
         self._active_mode_key = mode_key
         self._history_panel.set_mode_label(self._active_mode.display_name)
-        self._conversation_widget.set_assistant_label(self._active_mode.display_name)
+        self._apply_assistant_label()
+        self._update_media_display()
         self._apply_mode_theme(self._active_mode)
         self._ensure_active_mode_ready()
         conversation_id = self._get_active_conversation_id()
@@ -301,6 +315,42 @@ class MainWindow(QMainWindow):
         """
         self.setStyleSheet(stylesheet)
         self.setWindowTitle(mode.window_title)
+
+    def _apply_assistant_label(self) -> None:
+        label = self._active_mode.assistant_label or self._active_mode.display_name
+        self._conversation_widget.set_assistant_label(label)
+
+    def _update_media_display(self) -> None:
+        mode = self._active_mode
+        media_path = self._resolve_media_path(mode)
+        self._conversation_widget.set_media_content(mode.media_type, media_path)
+
+    def _resolve_media_path(self, mode: ConversationMode) -> Path | None:
+        if mode.key in self._media_cache:
+            return self._media_cache[mode.key]
+
+        if not mode.media_subdir:
+            self._media_cache[mode.key] = None
+            return None
+
+        base_dir = resource_path("screen_display", mode.media_subdir)
+        if not base_dir.exists():
+            logger.warning("Media directory not found: %s", base_dir)
+            self._media_cache[mode.key] = None
+            return None
+
+        allowed = tuple(ext.lower() for ext in MEDIA_EXTENSIONS.get(mode.media_type, ()))
+        for candidate in sorted(base_dir.iterdir()):
+            if not candidate.is_file():
+                continue
+            if allowed and candidate.suffix.lower() not in allowed:
+                continue
+            self._media_cache[mode.key] = candidate
+            return candidate
+
+        logger.warning("No media files found for mode %s in %s", mode.key, base_dir)
+        self._media_cache[mode.key] = None
+        return None
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self._worker_thread and self._worker_thread.isRunning():
