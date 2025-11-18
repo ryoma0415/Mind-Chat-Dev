@@ -7,6 +7,7 @@ from typing import Iterable, Literal
 
 
 def utc_now_iso() -> str:
+    # タイムゾーン付き ISO 文字列（秒精度）で現在時刻を取得するユーティリティ
     return datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat()
 
 
@@ -48,6 +49,7 @@ class Conversation:
         self.messages.append(message)
         self.updated_at = utc_now_iso()
         if self._should_update_title(message):
+            # 初回のユーザ発話などを利用して会話タイトルを自動更新
             self.title = self._derive_title_from_message(message)
 
     def extend_messages(self, messages: Iterable[ChatMessage]) -> None:

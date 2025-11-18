@@ -29,6 +29,7 @@ class LocalLLM:
         self._model_path = config.model_path
 
         self._llama: Llama | None = None
+        # llama.cpp の推論はスレッド非安全なため排他制御を入れておく
         self._lock = threading.Lock()
 
     def generate_reply(self, history: Iterable[ChatMessage], system_prompt: str | None) -> str:
@@ -59,6 +60,7 @@ class LocalLLM:
                     "model フォルダに Gemma 2 2B Japanese IT の GGUF ファイルを置いてください。"
                 )
 
+            # スレッド数は環境に応じて自動調整しつつ llama.cpp を初期化
             threads = self._config.threads or max(1, os.cpu_count() or 1)
             self._llama = Llama(
                 model_path=str(self._model_path),
@@ -126,6 +128,7 @@ class LocalLLM:
                 continue
             last = normalized[-1]
             if last.role == clone.role:
+                # 同じロールが連続した場合は 1 つに畳み込んでコンテキスト長を節約
                 last.content = f"{last.content}\n\n{clone.content}"
             else:
                 normalized.append(clone)

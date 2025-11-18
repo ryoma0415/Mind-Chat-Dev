@@ -9,6 +9,7 @@ from .ui import MainWindow
 
 
 def main() -> None:
+    # Qt アプリのエントリポイント。設定→メインウィンドウを生成して実行する。
     app = QApplication(sys.argv)
     config = AppConfig()
     window = MainWindow(config)

@@ -31,6 +31,7 @@ class HistoryManager:
         default_path = config.default_mode.history_path(config.paths)
         self._path: Path = history_file or default_path
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        # 異常終了しても壊れないよう初期状態の JSON を用意する
         if not self._path.exists():
             self._path.write_text("[]", encoding="utf-8")
         self._conversations: list[Conversation] = []
@@ -58,6 +59,7 @@ class HistoryManager:
     def create_conversation(self) -> Conversation:
         conversation = Conversation()
         self._conversations.insert(0, conversation)
+        # 件数上限を超えないよう新規作成直後に整理する
         self._enforce_limits()
         self._persist()
         return conversation
@@ -72,6 +74,7 @@ class HistoryManager:
     def remove_trailing_user_message(self, conversation_id: str) -> Conversation:
         conversation = self.get_conversation(conversation_id)
         if conversation.messages and conversation.messages[-1].role == "user":
+            # LLM 応答に失敗した場合は最後のユーザ発話を巻き戻す
             conversation.messages.pop()
             conversation.updated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
             self._persist()
@@ -109,6 +112,7 @@ class HistoryManager:
         try:
             payload = json.loads(self._path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
+            # ファイル破損時は安全に空の状態で立ち上げる
             payload = []
 
         conversations = [Conversation.from_dict(item) for item in payload]
@@ -135,6 +139,7 @@ class HistoryManager:
             self._conversations.remove(conversation)
         except ValueError:
             pass
+        # アクティブな会話をリストの先頭へ押し上げる
         self._conversations.insert(0, conversation)
 
     def _enforce_limits(self) -> None:

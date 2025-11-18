@@ -21,6 +21,7 @@ class LLMWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
+            # GUI スレッドを塞がないよう別スレッドで推論を実行
             response = self._client.generate_reply(self._messages, self._system_prompt)
         except Exception as exc:  # pragma: no cover - runtime safety
             self.failed.emit(str(exc))

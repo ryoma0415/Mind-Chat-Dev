@@ -30,6 +30,7 @@ class HistoryPanel(QWidget):
         self._mode_label.setStyleSheet("font-weight: 600; font-size: 14px;")
 
         self._list = QListWidget(self)
+        # クリックイベント中に会話ロードを行うため、selectionChanged で拾う
         self._list.itemSelectionChanged.connect(self._on_selection_changed)
 
         self._new_button = QPushButton("新しく対話を始める", self)
@@ -54,6 +55,7 @@ class HistoryPanel(QWidget):
     def set_conversations(self, conversations: Iterable[Conversation]) -> None:
         selected_id = self.current_conversation_id
         self._conversations = list(conversations)
+        # リストを再構築する間は選択シグナルを止めて無限ループを防ぐ
         self._list.blockSignals(True)
         self._list.clear()
         for conversation in self._conversations:
@@ -94,6 +96,7 @@ class HistoryPanel(QWidget):
             timestamp = dt.strftime("%Y-%m-%d %H:%M")
         except ValueError:
             timestamp = conversation.updated_at
+        # 一覧表示では最終更新日時を添えることで状況を把握しやすくする
         return f"{star} {conversation.title}  ({timestamp})"
 
     def _on_selection_changed(self) -> None:

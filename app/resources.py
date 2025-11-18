@@ -11,6 +11,7 @@ def _package_root() -> Path:
 
     base = getattr(sys, "_MEIPASS", None)
     if base:
+        # PyInstaller で固めた場合は一時展開ディレクトリを指す
         return Path(base).resolve()
     return Path(__file__).resolve().parent.parent
 
@@ -20,4 +21,5 @@ def resource_path(*relative_parts: str) -> Path:
 
     if not relative_parts:
         return _package_root()
+    # アプリ直下の screen_display などにアクセスするときに使う
     return _package_root().joinpath(*relative_parts)

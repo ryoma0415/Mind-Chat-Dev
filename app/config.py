@@ -15,6 +15,7 @@ class AppPaths:
     model_dir: Path = field(init=False)
 
     def __post_init__(self) -> None:
+        # アプリ初期化時に data / model ディレクトリを確実に作っておく
         object.__setattr__(self, "data_dir", self.root / "data")
         object.__setattr__(self, "model_dir", self.root / "model")
 
@@ -22,12 +23,14 @@ class AppPaths:
         self.model_dir.mkdir(parents=True, exist_ok=True)
 
     def ensure_history_file(self, filename: str) -> Path:
+        # 履歴ファイルが存在しなければ空配列を書き込んで初期化
         path = (self.data_dir / filename).resolve()
         if not path.exists():
             path.write_text("[]", encoding="utf-8")
         return path
 
     def resolve_model_path(self, default_filename: str) -> Path:
+        # 環境変数でパスを上書きできるようにしつつ、デフォルトは model ディレクトリ配下を見る
         override = os.getenv("MINDCHAT_MODEL_PATH")
         if override:
             return Path(override).expanduser().resolve()
@@ -93,9 +96,11 @@ class AppConfig:
         return self.paths.resolve_model_path(self.model_filename)
 
     def __post_init__(self) -> None:
+        # dataclass の初期化完了後にモード一覧を確定させる
         object.__setattr__(self, "modes", self._build_modes())
 
     def _build_modes(self) -> tuple[ConversationMode, ...]:
+        # UI テーマやプロンプト設定をまとめたモード情報をここで定義する
         mind_theme = ModeTheme(
             base_background="#f1f7f3",
             panel_background="#ffffff",

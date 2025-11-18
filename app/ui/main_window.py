@@ -51,6 +51,7 @@ class MainWindow(QMainWindow):
             key: HistoryManager(config, history_file=mode.history_path(config.paths))
             for key, mode in self._modes.items()
         }
+        # モードごとに独立した履歴／選択状態を持たせて UI 切替時の混乱を避ける
         self._current_conversation_ids: dict[str, str | None] = {key: None for key in self._modes}
         self._media_cache: dict[str, Path | None] = {}
         self._llm_client: LocalLLM | None = None
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
         try:
             self._llm_client = LocalLLM(config)
         except Exception as exc:  # pragma: no cover - runtime feedback
+            # モデルが無い環境でも起動だけはできるようにエラーメッセージを保持する
             self._llm_error = str(exc)
 
         self._worker_thread: QThread | None = None
@@ -115,6 +117,7 @@ class MainWindow(QMainWindow):
         self._ensure_active_mode_ready()
         conversation_id = self._get_active_conversation_id()
         self._refresh_history_panel(select_id=conversation_id)
+        # 最初の起動では履歴先頭または新規を読み込んで画面を埋める
         if conversation_id:
             self._load_conversation(conversation_id)
 
@@ -131,6 +134,7 @@ class MainWindow(QMainWindow):
             self._show_warning("履歴の読み込みに失敗しました", str(exc))
             return
         self._set_active_conversation_id(conversation.conversation_id)
+        # 読み取ったメッセージをそのまま transcript に反映
         self._conversation_widget.display_conversation(conversation)
 
     def _toggle_favorite(self, conversation_id: str) -> None:
@@ -156,6 +160,7 @@ class MainWindow(QMainWindow):
         conversation = self._active_history.append_message(conversation_id, message)
         self._conversation_widget.append_message(message)
         self._refresh_history_panel(select_id=conversation.conversation_id)
+        # LLM レスポンスが返るまで UI 操作をロックする
         self._set_busy(True, "AIが考え中です...")
         self._request_llm_response(conversation)
 
@@ -170,6 +175,7 @@ class MainWindow(QMainWindow):
             return
 
         if self._worker_thread and self._worker_thread.isRunning():
+            # すでに別レスポンスを計算中ならキューを増やさずに無視
             return
 
         self._worker = LLMWorker(
@@ -212,6 +218,7 @@ class MainWindow(QMainWindow):
             self._conversation_widget.display_conversation(conversation)
             self._refresh_history_panel(select_id=conversation.conversation_id)
         self._set_busy(False)
+        # エラー内容はダイアログで通知し、巻き戻したことが視覚的にわかるようにする
         self._show_warning("応答生成に失敗しました", error_message)
 
     def _cleanup_worker(self) -> None:
@@ -227,10 +234,12 @@ class MainWindow(QMainWindow):
         if target_id and self._history_panel.current_conversation_id != target_id:
             self._history_panel.select_conversation(target_id)
         if target_id:
+            # UI の選択と内部状態を揃えておかないと LLM 応答の紐付けがズレる
             self._set_active_conversation_id(target_id)
 
     def _set_busy(self, is_busy: bool, status_text: str | None = None) -> None:
         self._conversation_widget.set_busy(is_busy, status_text)
+        # 推論中は履歴やモード切替ができないようにして状態遷移を単純化
         self._history_panel.setDisabled(is_busy)
         self._mode_selector.setDisabled(is_busy)
 
@@ -245,6 +254,7 @@ class MainWindow(QMainWindow):
         self._apply_mode_theme(self._active_mode)
         self._ensure_active_mode_ready()
         conversation_id = self._get_active_conversation_id()
+        # モード固有の履歴に切り替え、必要なら該当の会話をロード
         self._refresh_history_panel(select_id=conversation_id)
         if conversation_id:
             self._load_conversation(conversation_id)
@@ -256,6 +266,7 @@ class MainWindow(QMainWindow):
         if conversations:
             self._set_active_conversation_id(conversations[0].conversation_id)
         else:
+            # 会話履歴が無い場合は即座に空の会話を作って表示可能にする
             conversation = self._active_history.create_conversation()
             self._set_active_conversation_id(conversation.conversation_id)
 
@@ -265,6 +276,7 @@ class MainWindow(QMainWindow):
                 self._mode_selector.blockSignals(True)
                 self._mode_selector.setCurrentIndex(index)
                 self._mode_selector.blockSignals(False)
+                # UI からの signal を出さずに選択状態だけ合わせておく
                 break
 
     def _get_active_conversation_id(self) -> str | None:
@@ -323,9 +335,11 @@ class MainWindow(QMainWindow):
     def _update_media_display(self) -> None:
         mode = self._active_mode
         media_path = self._resolve_media_path(mode)
+        # モード選択に応じて表示するメディアを差し替える
         self._conversation_widget.set_media_content(mode.media_type, media_path)
 
     def _resolve_media_path(self, mode: ConversationMode) -> Path | None:
+        # ファイル探索は重いためモードごとに結果をキャッシュ
         if mode.key in self._media_cache:
             return self._media_cache[mode.key]
 
@@ -345,6 +359,7 @@ class MainWindow(QMainWindow):
                 continue
             if allowed and candidate.suffix.lower() not in allowed:
                 continue
+            # 最初に見つかった許可済みファイルのパスをキャッシュ
             self._media_cache[mode.key] = candidate
             return candidate
 
@@ -354,6 +369,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self._worker_thread and self._worker_thread.isRunning():
+            # アプリ終了前にバックグラウンドの推論スレッドを安全に停止
             self._worker_thread.quit()
             self._worker_thread.wait()
         super().closeEvent(event)

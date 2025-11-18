@@ -57,6 +57,7 @@ class MediaDisplayWidget(QWidget):
             return
 
         self._current_pixmap = pixmap
+        # ラベルサイズにフィットするようにスケールを適用
         self._apply_pixmap()
         self._stack.setCurrentWidget(self._image_label)
 
@@ -72,6 +73,7 @@ class MediaDisplayWidget(QWidget):
         player.setVideoOutput(self._video_widget)
         self._video_widget.show()
         self._video_widget.update()
+        # PySide6 の QMediaPlayer には URL を渡す必要がある
         player.setSource(QUrl.fromLocalFile(str(path)))
         player.play()
         self._stack.setCurrentWidget(self._video_widget)
@@ -109,6 +111,7 @@ class MediaDisplayWidget(QWidget):
         self._player.setVideoOutput(self._video_widget)
         self._audio_output = QAudioOutput(self)
         self._audio_output.setVolume(0.0)
+        # カウンセリング中は映像のみ再生したいので音声はミュート
         self._player.setAudioOutput(self._audio_output)
         return self._player
 

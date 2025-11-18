@@ -41,6 +41,7 @@ class ConversationWidget(QWidget):
 
         self._media_widget = MediaDisplayWidget(self)
         self._splitter = QSplitter(Qt.Vertical, self)
+        # 上段: 動画・画像 / 下段: 応答ログ を切り替えできるレイアウト
         self._splitter.addWidget(self._media_widget)
         self._splitter.addWidget(self._transcript)
         self._splitter.setStretchFactor(0, 1)
@@ -79,6 +80,7 @@ class ConversationWidget(QWidget):
         self._status_label.clear()
 
     def append_message(self, message: ChatMessage) -> None:
+        # 新しいメッセージを末尾に追記し、常に最新までスクロールしておく
         self._transcript.moveCursor(QTextCursor.End)
         self._transcript.insertHtml(self._format_message(message))
         self._transcript.insertPlainText("\n")
@@ -99,6 +101,7 @@ class ConversationWidget(QWidget):
         if normalized == self._assistant_label:
             return
         self._assistant_label = normalized
+        # ラベルが変化したときは既存履歴も更新して統一感を保つ
         if self._current_conversation:
             self._render_messages(self._current_conversation.messages)
 
@@ -116,6 +119,7 @@ class ConversationWidget(QWidget):
         if not text:
             return
         self._input.clear()
+        # テキスト入力を外部に通知することで MainWindow が LLM 呼び出しを開始する
         self.message_submitted.emit(text)
 
     def _render_messages(self, messages: Iterable[ChatMessage]) -> None:
