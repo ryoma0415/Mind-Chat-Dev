@@ -132,6 +132,11 @@ class MainWindow(QMainWindow):
             conversation = self._active_history.get_conversation(conversation_id)
         except HistoryError as exc:
             self._show_warning("履歴の読み込みに失敗しました", str(exc))
+            # 現在の UI に前モードの内容が残らないように空の会話でリセットする
+            fallback = self._active_history.create_conversation()
+            self._set_active_conversation_id(fallback.conversation_id)
+            self._refresh_history_panel(select_id=fallback.conversation_id)
+            self._conversation_widget.display_conversation(fallback)
             return
         self._set_active_conversation_id(conversation.conversation_id)
         # 読み取ったメッセージをそのまま transcript に反映
@@ -200,24 +205,35 @@ class MainWindow(QMainWindow):
         self._worker_thread.start()
 
     def _handle_llm_success(self, response: str) -> None:
-        assistant_message = ChatMessage(role="assistant", content=response)
         conversation_id = self._get_active_conversation_id()
         if not conversation_id:
             self._set_busy(False)
             return
-        conversation = self._active_history.append_message(conversation_id, assistant_message)
-        self._conversation_widget.append_message(assistant_message)
-        self._set_active_conversation_id(conversation.conversation_id)
-        self._set_busy(False)
-        self._refresh_history_panel(select_id=conversation.conversation_id)
-
-    def _handle_llm_failure(self, error_message: str) -> None:
-        conversation_id = self._get_active_conversation_id()
-        if conversation_id:
-            conversation = self._active_history.remove_trailing_user_message(conversation_id)
+        try:
+            assistant_message = ChatMessage(role="assistant", content=response)
+            conversation = self._active_history.append_message(conversation_id, assistant_message)
+            self._set_active_conversation_id(conversation.conversation_id)
+            # リサイズ等で transcript が崩れても履歴から再描画して確実に反映する
             self._conversation_widget.display_conversation(conversation)
             self._refresh_history_panel(select_id=conversation.conversation_id)
-        self._set_busy(False)
+        except Exception as exc:  # pragma: no cover - UI robustness
+            logger.exception("Failed to render assistant response", exc_info=exc)
+            self._show_warning(
+                "表示に失敗しました",
+                "応答の生成は完了しましたが、保存または画面の更新に失敗しました。会話を開き直してください。",
+            )
+        finally:
+            self._set_busy(False)
+
+    def _handle_llm_failure(self, error_message: str) -> None:
+        try:
+            conversation_id = self._get_active_conversation_id()
+            if conversation_id:
+                conversation = self._active_history.remove_trailing_user_message(conversation_id)
+                self._conversation_widget.display_conversation(conversation)
+                self._refresh_history_panel(select_id=conversation.conversation_id)
+        finally:
+            self._set_busy(False)
         # エラー内容はダイアログで通知し、巻き戻したことが視覚的にわかるようにする
         self._show_warning("応答生成に失敗しました", error_message)
 
