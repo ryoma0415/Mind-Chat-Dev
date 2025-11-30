@@ -21,9 +21,11 @@ from ..history import FavoriteLimitError, HistoryError, HistoryManager
 from ..llm_client import LocalLLM
 from ..models import ChatMessage, Conversation
 from ..resources import resource_path
+from ..speech_recognizer import SpeechRecognizer
 from .conversation_widget import ConversationWidget
 from .history_panel import HistoryPanel
-from .workers import LLMWorker
+from .audio_recorder import AudioRecorder
+from .workers import LLMWorker, SpeechWorker
 
 
 MEDIA_EXTENSIONS = {
@@ -65,6 +67,12 @@ class MainWindow(QMainWindow):
 
         self._worker_thread: QThread | None = None
         self._worker: LLMWorker | None = None
+        self._speech_thread: QThread | None = None
+        self._speech_worker: SpeechWorker | None = None
+        self._speech_recognizer = SpeechRecognizer(config)
+        self._audio_recorder = AudioRecorder(self)
+        self._is_llm_busy = False
+        self._is_recording = False
 
         self.resize(1100, 700)
 
@@ -72,6 +80,7 @@ class MainWindow(QMainWindow):
         self._history_panel.set_mode_label(self._active_mode.display_name)
         self._conversation_widget = ConversationWidget(self)
         self._apply_assistant_label()
+        self._conversation_widget.record_button_clicked.connect(self._toggle_recording)
         self._update_media_display()
 
         self._mode_selector = QComboBox(self)
@@ -106,8 +115,13 @@ class MainWindow(QMainWindow):
         self._history_panel.conversation_selected.connect(self._load_conversation)
         self._history_panel.favorite_toggle_requested.connect(self._toggle_favorite)
         self._conversation_widget.message_submitted.connect(self._handle_user_message)
+        self._audio_recorder.recording_started.connect(self._handle_recording_started)
+        self._audio_recorder.recording_stopped.connect(self._handle_recording_stopped)
+        self._audio_recorder.audio_ready.connect(self._handle_audio_ready)
+        self._audio_recorder.error.connect(self._handle_recording_error)
 
         self._apply_mode_theme(self._active_mode)
+        self._refresh_interaction_locks()
         self._bootstrap_conversation()
         if self._llm_error:
             self._show_warning("LLMの初期化に失敗しました", self._llm_error)
@@ -168,6 +182,22 @@ class MainWindow(QMainWindow):
         # LLM レスポンスが返るまで UI 操作をロックする
         self._set_busy(True, "AIが考え中です...")
         self._request_llm_response(conversation)
+
+    def _toggle_recording(self) -> None:
+        if self._is_recording:
+            self._audio_recorder.stop()
+            return
+        if self._is_llm_busy:
+            self._show_warning("録音できません", "AI応答中は録音を開始できません。")
+            return
+
+        availability_error = self._speech_recognizer.availability_error()
+        if availability_error:
+            self._show_warning("音声認識が利用できません", availability_error)
+            return
+
+        self._conversation_widget.set_status_text("マイクを初期化しています...")
+        self._audio_recorder.start()
 
     # LLM coordination ---------------------------------------------------
     def _request_llm_response(self, conversation: Conversation) -> None:
@@ -241,6 +271,80 @@ class MainWindow(QMainWindow):
         self._worker = None
         self._worker_thread = None
 
+    # Speech input coordination -----------------------------------------
+    def _handle_recording_started(self) -> None:
+        self._is_recording = True
+        self._conversation_widget.set_recording_state(True, "録音中...（最大2分／無音30秒で自動停止）")
+        self._refresh_interaction_locks()
+
+    def _handle_recording_stopped(self, reason: str) -> None:
+        self._is_recording = False
+        self._conversation_widget.set_recording_state(False)
+        if reason:
+            self._conversation_widget.set_status_text(reason)
+        elif not self._is_llm_busy:
+            self._conversation_widget.set_status_text("")
+        self._refresh_interaction_locks()
+
+    def _handle_recording_error(self, message: str) -> None:
+        self._is_recording = False
+        self._conversation_widget.set_recording_state(False)
+        self._conversation_widget.set_status_text(message)
+        self._refresh_interaction_locks()
+        self._show_warning("録音エラー", message)
+
+    def _handle_audio_ready(self, payload: object) -> None:
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return
+        pcm_bytes, sample_rate = payload
+        try:
+            pcm_bytes = bytes(pcm_bytes)  # type: ignore[arg-type]
+            sample_rate_int = int(sample_rate)
+        except Exception:
+            return
+
+        self._conversation_widget.set_status_text("音声を解析しています...")
+        self._start_speech_worker(pcm_bytes, sample_rate_int)
+
+    def _start_speech_worker(self, pcm_bytes: bytes, sample_rate: int) -> None:
+        if self._speech_thread and self._speech_thread.isRunning():
+            return
+
+        self._speech_worker = SpeechWorker(self._speech_recognizer, pcm_bytes, sample_rate)
+        self._speech_thread = QThread(self)
+
+        self._speech_worker.moveToThread(self._speech_thread)
+        self._speech_thread.started.connect(self._speech_worker.run)
+        self._speech_worker.recognized.connect(self._handle_recognition_success)
+        self._speech_worker.failed.connect(self._handle_recognition_failure)
+        self._speech_worker.recognized.connect(self._speech_thread.quit)
+        self._speech_worker.failed.connect(self._speech_thread.quit)
+        self._speech_worker.recognized.connect(self._cleanup_speech_worker)
+        self._speech_worker.failed.connect(self._cleanup_speech_worker)
+        self._speech_worker.recognized.connect(self._speech_worker.deleteLater)
+        self._speech_worker.failed.connect(self._speech_worker.deleteLater)
+        self._speech_thread.finished.connect(self._speech_thread.deleteLater)
+
+        # 音声解析中は誤操作防止のため録音ボタンを無効化
+        self._conversation_widget.set_record_button_enabled(False)
+        self._speech_thread.start()
+
+    def _handle_recognition_success(self, text: str) -> None:
+        self._conversation_widget.append_text_to_input(text)
+        self._conversation_widget.set_status_text("音声入力のテキストを挿入しました。編集して送信できます。")
+
+    def _handle_recognition_failure(self, error_message: str) -> None:
+        self._conversation_widget.set_status_text("音声認識に失敗しました。もう一度お試しください。")
+        self._show_warning("音声認識エラー", error_message)
+
+    def _cleanup_speech_worker(self) -> None:
+        self._speech_worker = None
+        self._speech_thread = None
+        self._refresh_interaction_locks()
+        # 録音が終了していて LLM も空きならステータスを消しておく
+        if not self._is_llm_busy and not self._is_recording:
+            self._conversation_widget.set_status_text("")
+
     # Helpers ------------------------------------------------------------
     def _refresh_history_panel(self, select_id: Optional[str] = None) -> None:
         conversations = self._active_history.list_conversations()
@@ -254,10 +358,9 @@ class MainWindow(QMainWindow):
             self._set_active_conversation_id(target_id)
 
     def _set_busy(self, is_busy: bool, status_text: str | None = None) -> None:
+        self._is_llm_busy = is_busy
         self._conversation_widget.set_busy(is_busy, status_text)
-        # 推論中は履歴やモード切替ができないようにして状態遷移を単純化
-        self._history_panel.setDisabled(is_busy)
-        self._mode_selector.setDisabled(is_busy)
+        self._refresh_interaction_locks()
 
     def _handle_mode_change(self, index: int) -> None:
         mode_key = self._mode_selector.itemData(index)
@@ -308,6 +411,14 @@ class MainWindow(QMainWindow):
     @property
     def _active_history(self) -> HistoryManager:
         return self._history_managers[self._active_mode_key]
+
+    def _refresh_interaction_locks(self) -> None:
+        locked = self._is_llm_busy or self._is_recording
+        self._history_panel.setDisabled(locked)
+        self._mode_selector.setDisabled(locked)
+        self._conversation_widget.set_record_button_enabled(
+            not self._is_llm_busy and self._speech_worker is None
+        )
 
     def _apply_mode_theme(self, mode: ConversationMode) -> None:
         theme = mode.theme
@@ -388,6 +499,11 @@ class MainWindow(QMainWindow):
             # アプリ終了前にバックグラウンドの推論スレッドを安全に停止
             self._worker_thread.quit()
             self._worker_thread.wait()
+        if self._speech_thread and self._speech_thread.isRunning():
+            self._speech_thread.quit()
+            self._speech_thread.wait()
+        if self._audio_recorder.is_recording:
+            self._audio_recorder.stop()
         super().closeEvent(event)
 
     def _show_warning(self, title: str, message: str) -> None:
