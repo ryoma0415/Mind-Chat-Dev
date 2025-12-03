@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor, QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -41,6 +41,10 @@ class ConversationWidget(QWidget):
         self._transcript = QTextEdit(self)
         self._transcript.setReadOnly(True)
         self._transcript.setMinimumHeight(300)
+
+        font = QFont()
+        font.setPointSize(16) 
+        self._transcript.setFont(font)
 
         self._media_widget = MediaDisplayWidget(self)
         self._splitter = QSplitter(Qt.Vertical, self)
@@ -172,10 +176,17 @@ class ConversationWidget(QWidget):
         self._transcript.moveCursor(QTextCursor.End)
 
     def _format_message(self, message: ChatMessage) -> str:
-        role_label = "あなた" if message.role == "user" else self._assistant_label
+        if message.role == "user":
+            role_label = "👤 あなた"
+            color = "blue"  # ユーザーは緑
+        else:
+            role_label = f"🤖 {self._assistant_label}"
+            color = "green"   # アシスタントは青
+        
         escaped = html.escape(message.content).replace("\n", "<br>")
-        return f"<p><b>{role_label}</b><br>{escaped}</p>"
-
+        # <span>で文字色を指定
+        return f'<p><b style="color:{color}">{role_label}</b><br>{escaped}</p>'
+    
     def _refresh_controls(self) -> None:
         disable_send = self._is_busy or self._is_recording
         self._send_button.setDisabled(disable_send)

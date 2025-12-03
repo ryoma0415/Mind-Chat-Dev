@@ -427,13 +427,22 @@ class MainWindow(QMainWindow):
             background-color: {theme.base_background};
             color: {theme.text};
         }}
-        QTextEdit, QPlainTextEdit {{
+        /* QTextEdit, QPlainTextEdit, QListWidget に統一して角丸と視覚的差別化を適用 */
+        QTextEdit, QPlainTextEdit, QListWidget {{
             background-color: {theme.panel_background};
-            border: 1px solid #d6d6d6;
+            /* 1px の薄いボーダーでパネルの分離効果を出す */
+            border: 1px solid #d6d6d6; 
+            border-radius: 8px; /* 角丸の適用 */
+            padding: 4px; /* テキストとボーダーの間にゆとりを持たせる */
         }}
-        QListWidget {{
-            background-color: {theme.panel_background};
-            border: 1px solid #d6d6d6;
+        /* QListWidget の選択アイテムにアクセントカラーを適用 */
+        QListWidget::item:selected {{
+            background-color: {theme.accent};
+            color: {theme.accent_text}; 
+            border-radius: 6px; 
+        }}
+        QListWidget::item:selected:!active {{
+            background-color: {theme.accent}; 
         }}
         QPushButton {{
             background-color: {theme.accent};
