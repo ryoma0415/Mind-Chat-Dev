@@ -8,6 +8,7 @@ Mind-Chat は Gemma 2 2B Japanese IT (GGUF) をローカル実行し、完全オ
 - **メディア表示エリア**: モードに応じて `screen_display/` 内の動画または静止画をチャット画面上部に表示。Mind-Chat では動画をループ再生、通常会話では静止画をフィット表示。
 - **履歴管理**: モードごとに最大 60 会話、お気に入り最大 50 件。超過時は非お気に入りを自動削除。履歴から再開・お気に入りトグル・再生成などの操作が可能。
 - **PyInstaller 配布を想定**: ランチャースクリプトと `resource_path` ヘルパーを用意し、`screen_display/` や `model/` を含めた onedir 配布が容易。
+- **音声入力**: 入力欄横のマイクボタンで録音を開始/停止し、認識結果をテキスト欄に挿入して編集してから送信できます（最大2分、無音30秒で自動停止）。音声ファイルは保存しません。
 
 ## ディレクトリ構成
 ```
@@ -39,6 +40,7 @@ Mind-Chat/
 - `pip install -r requirements.txt` で導入するライブラリ
   - `llama-cpp-python>=0.2.84`
   - `PySide6>=6.7.0`
+  - `vosk>=0.3.45`（音声入力に使用）
 - **Linux のみ**: QtMultimedia が PulseAudio を利用するため `libpulse0` (および `libpulse-mainloop-glib0`) を apt 等で事前にインストールしてください。
 - Gemma 2 2B Japanese IT (GGUF) のモデルファイル
 
@@ -55,6 +57,12 @@ pip install -r requirements.txt
 1. `model/` 配下に Gemma 2 2B Japanese IT の GGUF を配置します。デフォルトファイル名は `gemma-2-2b-it-japanese-it.gguf` です。
 2. 別ファイル名や別ディレクトリを使う場合は環境変数 `MINDCHAT_MODEL_PATH` にフルパスを指定してください。
 
+### 音声認識モデルの準備（音声入力を使う場合）
+1. Vosk の日本語モデル（例: `vosk-model-small-ja-0.22`）をダウンロードして解凍します。  
+   https://alphacephei.com/vosk/models から入手できます。
+2. 解凍したフォルダを `model/vosk-model-small-ja-0.22/` のように配置するか、環境変数 `MINDCHAT_SPEECH_MODEL_PATH` にモデルディレクトリのフルパスを指定します。
+3. `vosk` がインストールされていない場合は `pip install vosk` を実行してください。
+
 ## メディアアセット
 - `screen_display/Mind-Chat/` に動画 (`.mp4`/`.mov`/`.mkv` など) を置くと Mind-Chat モードでループ再生されます。複数ある場合はファイル名の昇順で最初の 1 つを選択。
 - `screen_display/通常モード/` に画像 (`.png`/`.jpg`/`.gif` 等) を置くと通常会話モードで表示されます。
@@ -67,6 +75,7 @@ python -m app.main
 - 起動直後は **通常会話モード** で開始します（メディアは静止画表示、アシスタント名は「Gemma2-2B-JPN-IT」）。
 - 左ペインの履歴から会話を選択／お気に入り切替／新規作成が可能。右ペインで入力するとローカル LLM が応答します。
 - モード切替ドロップダウンを操作すると、履歴・テーマカラー・メディア表示・アシスタント名が切り替わります。
+- 音声入力は右下の「録音開始」ボタンで開始/停止できます。録音停止後、自動でテキスト欄に認識結果が挿入されるので編集して送信してください。LLM応答中は録音できません。
 
 ## 会話管理仕様
 - 履歴はモードごとに JSON (`data/history_mindchat.json`, `data/history_plain.json`) へ保存。
