@@ -4,6 +4,10 @@ import html
 from pathlib import Path
 from typing import Iterable
 
+# 外部ライブラリをインポート
+import markdown
+import re # <-- ここでreもインポートして利用
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextCursor, QFont
 from PySide6.QtWidgets import (
@@ -78,7 +82,7 @@ class ConversationWidget(QWidget):
         top_layout.addStretch()          
         top_layout.addLayout(font_layout)  
         top_layout.setContentsMargins(8, 0, 8, 0)
-     
+    
 
         self._media_widget = MediaDisplayWidget(self)
         self._splitter = QSplitter(Qt.Vertical, self)
@@ -220,14 +224,31 @@ class ConversationWidget(QWidget):
     def _format_message(self, message: ChatMessage) -> str:
         if message.role == "user":
             role_label = "👤 あなた"
-            color = "blue"  # ユーザーは緑
+            color = "blue"  # ユーザーは青
+            # ユーザー入力はMarkdownではないと想定し、シンプルにエスケープと改行処理
+            content = html.escape(message.content).replace("\n", "<br>")
         else:
             role_label = f"🤖 {self._assistant_label}"
-            color = "green"   # アシスタントは青
-        
-        escaped = html.escape(message.content).replace("\n", "<br>")
-        # <span>で文字色を指定
-        return f'<p><b style="color:{color}">{role_label}</b><br>{escaped}</p>'
+            color = "green"  # アシスタントは緑
+            
+            # 外部ライブラリ (markdown) を使用して、MarkdownをHTMLに変換
+            content = markdown.markdown(
+                message.content, 
+                extensions=[
+                    'fenced_code', # バッククォート3つ (```) によるコードブロック
+                    'tables',      # テーブル
+                    'nl2br'        # 改行を <br> に変換
+                ]
+            )
+            
+            # --- Markdownパーサーが出力する外側の <p> タグを削除 ---
+            # QTextEdit の挿入するHTMLと競合して表示がおかしくなるのを防ぐため
+            if content.startswith('<p>') and content.endswith('</p>'):
+                # <p>...</p> のタグ部分のみを削除
+                content = content[3:-4]
+
+        # <span>で文字色を指定。role_labelとMarkdown変換後のcontentを組み合わせる
+        return f'<p><b style="color:{color}">{role_label}</b><br>{content}</p>'
     
     def _refresh_controls(self) -> None:
         disable_send = self._is_busy or self._is_recording
