@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QComboBox,
+    QSizePolicy,
 )
 
 from ..models import ChatMessage, Conversation
@@ -42,9 +44,41 @@ class ConversationWidget(QWidget):
         self._transcript.setReadOnly(True)
         self._transcript.setMinimumHeight(300)
 
-        font = QFont()
-        font.setPointSize(16) 
-        self._transcript.setFont(font)
+        # フォントサイズ初期設定
+        self._font = QFont()
+        self._font.setPointSize(16)
+        self._transcript.setFont(self._font)
+
+        # フォントサイズラベル
+        font_label = QLabel("フォントサイズ:", self)
+        font_label.setFont(QFont("Arial", 10))
+
+        # コンボボックス
+        self._font_size_combo = QComboBox(self)
+        self._font_size_combo.setFixedHeight(22)
+        self._font_size_combo.setFont(QFont("Arial", 10))
+        for size in [10, 12, 14, 16, 18, 20, 22, 24]:
+            self._font_size_combo.addItem(str(size))
+        self._font_size_combo.setCurrentText(str(self._font.pointSize()))
+        self._font_size_combo.currentTextChanged.connect(self._change_font_size)
+
+        # ウェルカムラベルを左寄せ・1行に固定
+        self._welcome_label.setWordWrap(False)
+        self._welcome_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        # フォントサイズ部分を右端にまとめる
+        font_layout = QHBoxLayout()
+        font_layout.setSpacing(2)  
+        font_layout.addWidget(font_label)
+        font_layout.addWidget(self._font_size_combo)
+
+        # トップレイアウト
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(self._welcome_label)
+        top_layout.addStretch()          
+        top_layout.addLayout(font_layout)  
+        top_layout.setContentsMargins(8, 0, 8, 0)
+     
 
         self._media_widget = MediaDisplayWidget(self)
         self._splitter = QSplitter(Qt.Vertical, self)
@@ -77,7 +111,7 @@ class ConversationWidget(QWidget):
         input_row.setSpacing(8)
 
         layout = QVBoxLayout()
-        layout.addWidget(self._welcome_label)
+        layout.addLayout(top_layout)
         layout.addWidget(self._splitter, stretch=1)
         layout.addWidget(self._status_label)
         layout.addLayout(input_row)
@@ -87,6 +121,14 @@ class ConversationWidget(QWidget):
         self._refresh_controls()
 
     # Public API ---------------------------------------------------------
+    def _change_font_size(self, size_str: str) -> None:
+        try:
+            size = int(size_str)
+            self._font.setPointSize(size)
+            self._transcript.setFont(self._font)
+        except ValueError:
+            pass
+
     def display_conversation(self, conversation: Conversation) -> None:
         self._current_conversation = conversation
         self._render_messages(conversation.messages)
