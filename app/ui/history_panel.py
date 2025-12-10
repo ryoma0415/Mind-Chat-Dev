@@ -19,6 +19,8 @@ class HistoryPanel(QWidget):
     conversation_selected = Signal(str)
     new_conversation_requested = Signal()
     favorite_toggle_requested = Signal(str)
+    # 🗑️ 削除を要求するためのシグナルを追加
+    delete_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -40,10 +42,17 @@ class HistoryPanel(QWidget):
         self._favorite_button.clicked.connect(self._on_favorite_clicked)
         self._favorite_button.setEnabled(False)
 
+        # 🗑️ 削除ボタンの追加
+        self._delete_button = QPushButton("🗑️ 履歴を削除", self)
+        self._delete_button.clicked.connect(self._on_delete_clicked)
+        self._delete_button.setEnabled(False)
+
         layout = QVBoxLayout()
         layout.addWidget(self._mode_label)
         layout.addWidget(self._new_button)
         layout.addWidget(self._favorite_button)
+        # 🗑️ 削除ボタンをレイアウトに追加
+        layout.addWidget(self._delete_button)
         layout.addWidget(self._list, stretch=1)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(8)
@@ -67,7 +76,8 @@ class HistoryPanel(QWidget):
         self._list.blockSignals(False)
         if not self._list.currentItem() and self._list.count() > 0:
             self._list.setCurrentRow(0)
-        self._update_favorite_button_state()
+        # 🗑️ ボタンの状態を更新
+        self._update_button_states()
 
     def select_conversation(self, conversation_id: str) -> None:
         for index in range(self._list.count()):
@@ -77,7 +87,8 @@ class HistoryPanel(QWidget):
                 self._list.setCurrentItem(item)
                 self._list.blockSignals(False)
                 self.conversation_selected.emit(conversation_id)
-                self._update_favorite_button_state()
+                # 🗑️ ボタンの状態を更新
+                self._update_button_states()
                 return
 
     @property
@@ -101,7 +112,8 @@ class HistoryPanel(QWidget):
 
     def _on_selection_changed(self) -> None:
         conversation_id = self.current_conversation_id
-        self._update_favorite_button_state()
+        # 🗑️ ボタンの状態を更新
+        self._update_button_states()
         if conversation_id:
             self.conversation_selected.emit(conversation_id)
 
@@ -110,5 +122,14 @@ class HistoryPanel(QWidget):
         if conversation_id:
             self.favorite_toggle_requested.emit(conversation_id)
 
-    def _update_favorite_button_state(self) -> None:
-        self._favorite_button.setEnabled(self.current_conversation_id is not None)
+    # 🗑️ 削除ボタンのクリックハンドラ
+    def _on_delete_clicked(self) -> None:
+        conversation_id = self.current_conversation_id
+        if conversation_id:
+            self.delete_requested.emit(conversation_id)
+
+    # 🗑️ ボタンの状態をまとめて更新するメソッド
+    def _update_button_states(self) -> None:
+        is_selected = self.current_conversation_id is not None
+        self._favorite_button.setEnabled(is_selected)
+        self._delete_button.setEnabled(is_selected)

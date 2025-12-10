@@ -114,6 +114,8 @@ class MainWindow(QMainWindow):
         self._history_panel.new_conversation_requested.connect(self._handle_new_conversation)
         self._history_panel.conversation_selected.connect(self._load_conversation)
         self._history_panel.favorite_toggle_requested.connect(self._toggle_favorite)
+        # 🗑️ 削除シグナルを処理メソッドに接続
+        self._history_panel.delete_requested.connect(self._handle_delete_conversation)
         self._conversation_widget.message_submitted.connect(self._handle_user_message)
         self._audio_recorder.recording_started.connect(self._handle_recording_started)
         self._audio_recorder.recording_stopped.connect(self._handle_recording_stopped)
@@ -166,6 +168,48 @@ class MainWindow(QMainWindow):
             self._show_warning("お気に入りの更新に失敗しました", str(exc))
             return
         self._refresh_history_panel(select_id=conversation.conversation_id)
+
+    # 🗑️ 会話削除のハンドラを実装
+    def _handle_delete_conversation(self, conversation_id: str) -> None:
+        # 削除確認ダイアログを表示
+        reply = QMessageBox.question(
+            self,
+            "履歴の削除確認",
+            "選択された会話を削除しますか？\nこの操作は元に戻せません。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                # 1. HistoryManagerのdelete_conversationを呼び出す
+                self._active_history.delete_conversation(conversation_id)
+
+                # 2. 🗑️ 削除対象のIDが現在アクティブなIDと一致する場合、
+                #    内部状態をリセットし、UIを空の会話で即座に上書きする。
+                if self._get_active_conversation_id() == conversation_id:
+                    self._set_active_conversation_id(None) # None にリセット
+                    # 画面を空の会話で上書きし、削除された内容が見えないようにする
+                    self._conversation_widget.display_conversation(Conversation())
+
+                # 3. 履歴パネルを更新 (削除された会話が消える)
+                self._refresh_history_panel()
+
+                # 4. 新しいアクティブな会話を決定し、ロードして表示
+                #    履歴が空なら新規作成され、内部IDが設定される
+                self._ensure_active_mode_ready()
+                new_conversation_id = self._get_active_conversation_id()
+
+                if new_conversation_id:
+                    # new_conversation_id は必ず有効なIDなので、ロードする
+                    self._load_conversation(new_conversation_id)
+                # else: 既に上で空の会話を表示済みなので、何もしない
+
+            except HistoryError as exc:
+                self._show_warning("削除に失敗しました", str(exc))
+            except Exception as exc:
+                logger.exception("会話の削除またはUI更新に失敗しました", exc_info=exc)
+                self._show_warning("予期せぬエラー", "会話の削除または画面の更新に失敗しました。")
 
     def _handle_user_message(self, text: str) -> None:
         conversation_id = self._get_active_conversation_id()
@@ -350,12 +394,32 @@ class MainWindow(QMainWindow):
         conversations = self._active_history.list_conversations()
         current_before = self._history_panel.current_conversation_id
         self._history_panel.set_conversations(conversations)
-        target_id = select_id or current_before or self._get_active_conversation_id()
+
+        # 1. 会話リストが空の場合は、アクティブIDを確実に None に設定して終了
+        if not conversations:
+            self._set_active_conversation_id(None)
+            return
+
+        # 2. 選択対象IDを決定する
+        # 優先順位: 1. 引数で指定されたID(select_id) -> 2. 内部で保持していたアクティブID -> 3. リストの先頭
+        target_id = select_id or self._get_active_conversation_id()
+
+        if not target_id:
+            # target_id が None の場合、リストの先頭を強制的に選択
+            target_id = conversations[0].conversation_id
+
+        # 3. 履歴パネルの UI 側で選択を実行
         if target_id and self._history_panel.current_conversation_id != target_id:
+            # HistoryPanel の select_conversation は、内部で self.conversation_selected.emit(conversation_id) を行う
             self._history_panel.select_conversation(target_id)
-        if target_id:
-            # UI の選択と内部状態を揃えておかないと LLM 応答の紐付けがズレる
+            # select_conversation の中でも設定されるが、安全のためここでも内部状態を同期
             self._set_active_conversation_id(target_id)
+        elif target_id:
+            # 既に正しいIDが選択されている場合、内部IDだけは同期を確実にする
+            self._set_active_conversation_id(target_id)
+        else:
+            self._set_active_conversation_id(None) # 念のため
+
 
     def _set_busy(self, is_busy: bool, status_text: str | None = None) -> None:
         self._is_llm_busy = is_busy
@@ -431,18 +495,18 @@ class MainWindow(QMainWindow):
         QTextEdit, QPlainTextEdit, QListWidget {{
             background-color: {theme.panel_background};
             /* 1px の薄いボーダーでパネルの分離効果を出す */
-            border: 1px solid #d6d6d6; 
+            border: 1px solid #d6d6d6;
             border-radius: 8px; /* 角丸の適用 */
             padding: 4px; /* テキストとボーダーの間にゆとりを持たせる */
         }}
         /* QListWidget の選択アイテムにアクセントカラーを適用 */
         QListWidget::item:selected {{
             background-color: {theme.accent};
-            color: {theme.accent_text}; 
-            border-radius: 6px; 
+            color: {theme.accent_text};
+            border-radius: 6px;
         }}
         QListWidget::item:selected:!active {{
-            background-color: {theme.accent}; 
+            background-color: {theme.accent};
         }}
         QPushButton {{
             background-color: {theme.accent};
