@@ -247,8 +247,12 @@ class ConversationWidget(QWidget):
                 # <p>...</p> のタグ部分のみを削除
                 content = content[3:-4]
 
-        # <span>で文字色を指定。role_labelとMarkdown変換後のcontentを組み合わせる
-        return f'<p><b style="color:{color}">{role_label}</b><br>{content}</p>'
+        if content.strip().endswith(('</ul>', '</ol>')):
+           content += '<div style="height:0; line-height:0; margin:0; padding:0;"></div>'
+        
+        role_html = f'<p style="margin-bottom:0px;"><b style="color:{color}">{role_label}</b></p>'
+        
+        return f'<div style="margin-bottom: 10px;">{role_html}{content}</div>'
     
     def _refresh_controls(self) -> None:
         disable_send = self._is_busy or self._is_recording
