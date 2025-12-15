@@ -98,6 +98,32 @@ pyinstaller --onedir --name MindChat \
 - `--add-data` の区切りは Windows では `;`、Linux では `:` になる点に注意。
 - 生成された `dist/MindChat/` フォルダごと配布すれば、ユーザーは `MindChat.exe` を実行するだけで利用できます。
 
+### Windows での PyInstaller onedir ビルド手順（確実版）
+PowerShell を開き、リポジトリ直下で以下を実行してください。
+
+1. 依存ライブラリと PyInstaller を準備
+   ```powershell
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+   python -m pip install pyinstaller
+   ```
+2. onedir でビルド（マルチメディアとネイティブ DLL を確実に同梱）
+   ```powershell
+   pyinstaller --onedir --noconfirm --name MindChat `
+     --add-data "screen_display;screen_display" `
+     --add-data "model;model" `
+     --collect-binaries llama_cpp `
+     --collect-binaries vosk `
+     --collect-qt-plugins=multimedia `
+     mindchat_launcher.py
+   ```
+   - `--collect-binaries llama_cpp` / `vosk`: Llama / Vosk の DLL を取りこぼさないため。
+   - `--collect-qt-plugins=multimedia`: 動画再生・録音に必要な QtMultimedia プラグインを同梱。
+   - `--add-data "X;Y"` の `;` は Windows での区切り文字です。
+3. 出力物
+   - `dist/MindChat/` フォルダ一式を ZIP にして配布してください。
+   - 展開先フォルダが書き込み可能な場所にあることを案内してください（履歴 JSON をそのフォルダ内に保存するため）。
+
 ## トラブルシューティング
 - **`ImportError: libpulse.so.0`**: Linux で PulseAudio ライブラリが不足しています。`sudo apt install libpulse0 libpulse-mainloop-glib0` を実行してください。
 - **モデルファイルが見つからないエラー**: `model/` に GGUF が存在するか、`MINDCHAT_MODEL_PATH` の値を再確認してください。

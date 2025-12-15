@@ -4,8 +4,12 @@ import html
 from pathlib import Path
 from typing import Iterable
 
+# 外部ライブラリをインポート
+import markdown
+import re # <-- ここでreもインポートして利用
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor, QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -15,6 +19,8 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QComboBox,
+    QSizePolicy,
 )
 
 from ..models import ChatMessage, Conversation
@@ -41,6 +47,42 @@ class ConversationWidget(QWidget):
         self._transcript = QTextEdit(self)
         self._transcript.setReadOnly(True)
         self._transcript.setMinimumHeight(300)
+
+        # フォントサイズ初期設定
+        self._font = QFont()
+        self._font.setPointSize(16)
+        self._transcript.setFont(self._font)
+
+        # フォントサイズラベル
+        font_label = QLabel("フォントサイズ:", self)
+        font_label.setFont(QFont("Arial", 10))
+
+        # コンボボックス
+        self._font_size_combo = QComboBox(self)
+        self._font_size_combo.setFixedHeight(22)
+        self._font_size_combo.setFont(QFont("Arial", 10))
+        for size in [10, 12, 14, 16, 18, 20, 22, 24]:
+            self._font_size_combo.addItem(str(size))
+        self._font_size_combo.setCurrentText(str(self._font.pointSize()))
+        self._font_size_combo.currentTextChanged.connect(self._change_font_size)
+
+        # ウェルカムラベルを左寄せ・1行に固定
+        self._welcome_label.setWordWrap(False)
+        self._welcome_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        # フォントサイズ部分を右端にまとめる
+        font_layout = QHBoxLayout()
+        font_layout.setSpacing(2)  
+        font_layout.addWidget(font_label)
+        font_layout.addWidget(self._font_size_combo)
+
+        # トップレイアウト
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(self._welcome_label)
+        top_layout.addStretch()          
+        top_layout.addLayout(font_layout)  
+        top_layout.setContentsMargins(8, 0, 8, 0)
+    
 
         self._media_widget = MediaDisplayWidget(self)
         self._splitter = QSplitter(Qt.Vertical, self)
@@ -73,7 +115,7 @@ class ConversationWidget(QWidget):
         input_row.setSpacing(8)
 
         layout = QVBoxLayout()
-        layout.addWidget(self._welcome_label)
+        layout.addLayout(top_layout)
         layout.addWidget(self._splitter, stretch=1)
         layout.addWidget(self._status_label)
         layout.addLayout(input_row)
@@ -83,6 +125,14 @@ class ConversationWidget(QWidget):
         self._refresh_controls()
 
     # Public API ---------------------------------------------------------
+    def _change_font_size(self, size_str: str) -> None:
+        try:
+            size = int(size_str)
+            self._font.setPointSize(size)
+            self._transcript.setFont(self._font)
+        except ValueError:
+            pass
+
     def display_conversation(self, conversation: Conversation) -> None:
         self._current_conversation = conversation
         self._render_messages(conversation.messages)
@@ -172,10 +222,38 @@ class ConversationWidget(QWidget):
         self._transcript.moveCursor(QTextCursor.End)
 
     def _format_message(self, message: ChatMessage) -> str:
-        role_label = "あなた" if message.role == "user" else self._assistant_label
-        escaped = html.escape(message.content).replace("\n", "<br>")
-        return f"<p><b>{role_label}</b><br>{escaped}</p>"
+        if message.role == "user":
+            role_label = "👤 あなた"
+            color = "blue"  # ユーザーは青
+            # ユーザー入力はMarkdownではないと想定し、シンプルにエスケープと改行処理
+            content = html.escape(message.content).replace("\n", "<br>")
+        else:
+            role_label = f"🤖 {self._assistant_label}"
+            color = "green"  # アシスタントは緑
+            
+            # 外部ライブラリ (markdown) を使用して、MarkdownをHTMLに変換
+            content = markdown.markdown(
+                message.content, 
+                extensions=[
+                    'fenced_code', # バッククォート3つ (```) によるコードブロック
+                    'tables',      # テーブル
+                    'nl2br'        # 改行を <br> に変換
+                ]
+            )
+            
+            # --- Markdownパーサーが出力する外側の <p> タグを削除 ---
+            # QTextEdit の挿入するHTMLと競合して表示がおかしくなるのを防ぐため
+            if content.startswith('<p>') and content.endswith('</p>'):
+                # <p>...</p> のタグ部分のみを削除
+                content = content[3:-4]
 
+        if content.strip().endswith(('</ul>', '</ol>')):
+           content += '<div style="height:0; line-height:0; margin:0; padding:0;"></div>'
+        
+        role_html = f'<p style="margin-bottom:0px;"><b style="color:{color}">{role_label}</b></p>'
+        
+        return f'<div style="margin-bottom: 10px;">{role_html}{content}</div>'
+    
     def _refresh_controls(self) -> None:
         disable_send = self._is_busy or self._is_recording
         self._send_button.setDisabled(disable_send)
