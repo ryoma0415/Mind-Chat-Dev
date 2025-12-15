@@ -50,6 +50,8 @@ git clone <this-repo>
 cd Mind-Chat
 python -m venv .venv
 source .venv/bin/activate    # Windows: .venv\Scripts\activate
+# Llama をビルドせずに導入する（CPU 版 prebuilt wheel）
+python -m pip install "llama-cpp-python==0.3.2" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu --only-binary=:all:
 pip install -r requirements.txt
 ```
 
@@ -107,22 +109,26 @@ PowerShell を開き、リポジトリ直下で以下を実行してください
    python -m pip install -r requirements.txt
    python -m pip install pyinstaller
    ```
+   - Python 3.12 環境で `llama-cpp-python` の wheel を確実に入れるには、以下のように CPU 版の prebuilt wheel を指定できます:
+     ```powershell
+     python -m pip install "llama-cpp-python==0.3.2" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu --only-binary=:all:
+     ```
+     （wheel が無い場合は失敗し、ソースビルドに落ちません）
 2. onedir でビルド（マルチメディアとネイティブ DLL を確実に同梱）
    ```powershell
-   pyinstaller --onedir --noconfirm --name MindChat `
-     --add-data "screen_display;screen_display" `
-     --add-data "model;model" `
-     --collect-binaries llama_cpp `
-     --collect-binaries vosk `
-     --collect-qt-plugins=multimedia `
-     mindchat_launcher.py
+   pyinstaller --onedir --noconfirm --name MindChat --add-data "screen_display;screen_display" --add-data "model;model" --collect-binaries llama_cpp --collect-binaries vosk --collect-all PySide6.QtMultimedia mindchat_launcher.py
    ```
    - `--collect-binaries llama_cpp` / `vosk`: Llama / Vosk の DLL を取りこぼさないため。
-   - `--collect-qt-plugins=multimedia`: 動画再生・録音に必要な QtMultimedia プラグインを同梱。
-   - `--add-data "X;Y"` の `;` は Windows での区切り文字です。
+- `--collect-all PySide6.QtMultimedia`: QtMultimedia プラグインをまとめて同梱（プラグイン未収集による動画/録音不可を防ぐ）。
+- `--add-data "X;Y"` の `;` は Windows での区切り文字です。
+#### コンソールを非表示にする場合（windowed ビルド）
+```powershell
+pyinstaller --onedir --noconfirm --name MindChat --windowed --add-data "screen_display;screen_display" --add-data "model;model" --collect-binaries llama_cpp --collect-binaries vosk --collect-all PySide6.QtMultimedia mindchat_launcher.py
+```
+`--windowed`（`--noconsole` 同等）で実行時のターミナルを表示しません。
 3. 出力物
-   - `dist/MindChat/` フォルダ一式を ZIP にして配布してください。
-   - 展開先フォルダが書き込み可能な場所にあることを案内してください（履歴 JSON をそのフォルダ内に保存するため）。
+  - `dist/MindChat/` フォルダ一式を ZIP にして配布してください。
+  - 展開先フォルダが書き込み可能な場所にあることを案内してください（履歴 JSON をそのフォルダ内に保存するため）。
 
 ## トラブルシューティング
 - **`ImportError: libpulse.so.0`**: Linux で PulseAudio ライブラリが不足しています。`sudo apt install libpulse0 libpulse-mainloop-glib0` を実行してください。
